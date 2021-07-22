@@ -1,0 +1,10 @@
+endpoint1:
+  host: localhost
+  port: 8080
+  endpoint: /health?name=gaurav
+  interval: 5000
+
+httpbinip:
+  host: https://httpbin.org
+  endpoint: /ip
+  interval: 5000
