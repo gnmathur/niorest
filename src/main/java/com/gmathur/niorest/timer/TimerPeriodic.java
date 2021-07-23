@@ -21,22 +21,19 @@
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package com.gmathur.niorest.http;
+package com.gmathur.niorest.timer;
 
-public enum HttpVersion {
-    HTTP_1_1("HTTP/1.1"),
-    HTTP_2("HTTP/2"),
-    HTTP_3("HTTP/3");
+import java.nio.channels.SelectionKey;
+import java.util.function.Function;
 
-    public final String label;
-
-    private HttpVersion(String label) {
-        this.label = label;
+public class TimerPeriodic extends Timer {
+    public TimerPeriodic(final Long intervalInMs, final Function<SelectionKey, Void> timerFn, final SelectionKey key) {
+        super(intervalInMs, timerFn, key);
     }
 
     @Override
-    public String toString() {
-        return label;
+    public void fn() {
+        super.fn();
+        TimerDb.get().register(new TimerPeriodic(intervalInMs, timerFn, selectionKey));
     }
 }
-

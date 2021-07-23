@@ -1,28 +1,30 @@
-/**
-Copyright (c) 2021 Gaurav Mathur
-
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the
-"Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
-
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-*/
+/*
+ * Copyright (c) 2021 Gaurav Mathur
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
 
 package com.gmathur.niorest;
 
+import com.gmathur.niorest.timer.TimerDb;
+import com.gmathur.niorest.timer.TimerPeriodic;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,10 +40,8 @@ import java.util.*;
 
 public final class Reactor implements Runnable {
     private final Logger logger = LoggerFactory.getLogger(Reactor.class.getCanonicalName());
-
     private final Selector clientSelector;
-    private final PriorityQueue<Timer> timedTasks = new PriorityQueue<>((o1, o2) -> (int)(o1.getIntervalMs() - o2.getIntervalMs()));
-    private final Long DEFAULT_REACTOR_TO_MS = 5000L;
+    private final TimerDb timerDb = TimerDb.get();
 
     private boolean keepRunning = true;
 
@@ -54,16 +54,15 @@ public final class Reactor implements Runnable {
     public void stop() { this.keepRunning = false; }
 
     public void addTask(final Task task) throws IOException {
-        // Create a non-blocking client channel
+        // Create a non-blocking client channel and set its options
         SocketChannel clientChannel = SocketChannel.open();
         clientChannel.configureBlocking(false);
         clientChannel.setOption(StandardSocketOptions.SO_KEEPALIVE, true);
 
-        SelectionKey clientKey = clientChannel.register(clientSelector, SelectionKey.OP_CONNECT | SelectionKey.OP_WRITE | SelectionKey.OP_READ);
+        SelectionKey clientKey = clientChannel.register(clientSelector, SelectionKey.OP_CONNECT);
         clientChannel.connect(new InetSocketAddress(task.getHost(), task.getPort()));
 
         clientKey.attach(task);
-        timedTasks.add(new Timer(clientKey, task.getInterval()));
         logger.info("Client {} registered", task.getClientId());
     }
 
@@ -107,12 +106,7 @@ public final class Reactor implements Runnable {
      */
     private void once() throws IOException {
         // ToDo null check
-        final Timer top = timedTasks.peek();
-
-        long selectTimeout = (top != null) ? top.getIntervalMs() : DEFAULT_REACTOR_TO_MS;
-
-        clientSelector.select(selectTimeout);
-        Long now = System.currentTimeMillis();
+        clientSelector.select(timerDb.smallestIntervalInMs());
 
         Set<SelectionKey> selectedKeys = clientSelector.selectedKeys();
         for (SelectionKey key: selectedKeys) {
@@ -122,8 +116,13 @@ public final class Reactor implements Runnable {
             if (key.isConnectable()) {
                 // ToDo handle connect exceptions here
                 boolean isConnected = ch.finishConnect();
+                logger.debug("Client {} {}", handler.getClientId(), isConnected);
                 assert(isConnected);
-                key.interestOps(SelectionKey.OP_WRITE & ~SelectionKey.OP_CONNECT);
+                key.interestOps(key.interestOps() & ~SelectionKey.OP_CONNECT);
+                timerDb.register(new TimerPeriodic(handler.getInterval(), k -> {
+                    k.interestOps(SelectionKey.OP_WRITE);
+                    return null;
+                }, key));
             } else if (key.isWritable()) {
                 write(ch, handler.getBuffer(), handler.getRequestBytes());
                 key.interestOps(SelectionKey.OP_READ & ~SelectionKey.OP_WRITE) ;
@@ -135,12 +134,7 @@ public final class Reactor implements Runnable {
         }
         selectedKeys.clear();;
 
-        for (Timer t : timedTasks) {
-            if ((now - t.getLastFiredAt()) > t.getIntervalMs()) {
-                t.getKey().interestOps(SelectionKey.OP_WRITE);
-                t.setLastFiredAt(now);
-            }
-        }
+        timerDb.dispatchExpiredTimers();
     }
 
     @Override
@@ -150,6 +144,7 @@ public final class Reactor implements Runnable {
             try {
                 once();
             } catch (IOException e) {
+                e.printStackTrace();
                 logger.info(String.format("Error starting reactor (err: %s)", e.getMessage()));
                 keepRunning = false;
             }
