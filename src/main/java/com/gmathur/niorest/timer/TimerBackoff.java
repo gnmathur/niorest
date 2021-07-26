@@ -29,17 +29,30 @@ import org.slf4j.LoggerFactory;
 import java.nio.channels.SelectionKey;
 import java.util.function.Function;
 
-public class TimerPeriodic extends Timer {
-    private static final Logger logger = LoggerFactory.getLogger(TimerPeriodic.class.getCanonicalName());
+/**
+ * A Timer that calculates the timer interval and next dispatch time according to the following exponential backoff
+ * algorithm intervalMs = (2^nConnectionRetries + randomMs)
+ *
+ * The calculated timer value is checked a provided max backoff time and is set to that value in case the calculated
+ * value matches or exceeded it.
+ */
+public class TimerBackoff extends Timer {
+    private static final Logger logger = LoggerFactory.getLogger(TimerBackoff.class.getCanonicalName());
 
-    public TimerPeriodic(final String sourceDesc, final Long intervalInMs, final Function<SelectionKey, Integer> timerFn, final SelectionKey key) {
-        super(sourceDesc, intervalInMs, timerFn, key);
-        logger.info("Created a backoff timer for {} ms", intervalInMs);
+    public TimerBackoff(final String sourceDesc, final Integer nConnectionRetries, final Long maxBackoffTimeMs,
+                        final Function<SelectionKey, Integer> timerFn, final SelectionKey key) {
+        super(sourceDesc, 0L, timerFn, key);
+        Long interval = ((1L << nConnectionRetries) * 1000L) + ((long)(Math.random() * 1000L));
+        if (interval > maxBackoffTimeMs) {
+            interval = maxBackoffTimeMs;
+        }
+        this.intervalInMs = interval;
+        this.nextDispatchMs = System.currentTimeMillis() + interval;
+        logger.info("Created a backoff timer for {} ms", interval);
     }
 
     @Override
     public void fn() {
         timerFn.apply(selectionKey);
-        TimerDb.get().register(new TimerPeriodic(sourceDesc, intervalInMs, timerFn, selectionKey));
     }
 }

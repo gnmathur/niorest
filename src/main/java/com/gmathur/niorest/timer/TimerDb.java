@@ -23,16 +23,22 @@
 
 package com.gmathur.niorest.timer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.PriorityQueue;
 
 /**
  * Singleton class to register and manage timers
  */
 public class TimerDb {
+    private static final Logger logger = LoggerFactory.getLogger(TimerDb.class.getCanonicalName());
+
     private static TimerDb instance = null;
-    private Long smallestIntervalInMs = Long.MAX_VALUE;
+    private final Long infiniteWaitMs = Long.MAX_VALUE;
     private final PriorityQueue<Timer> timedTasks = new PriorityQueue<>((o1, o2) -> (int)(o1.nextDispatchMs() - o2.nextDispatchMs()));
 
     private TimerDb() {}
@@ -43,23 +49,36 @@ public class TimerDb {
         return instance;
     }
 
-    public void register(final Timer t) {
+    public synchronized void register(final Timer t) {
+        Objects.requireNonNull(t, "Illegal attempt to register a null timer");
         timedTasks.add(t);
-        smallestIntervalInMs = (t.intervalInMs() < smallestIntervalInMs) ? t.intervalInMs() : smallestIntervalInMs;
     }
 
-    public Long smallestIntervalInMs() {
-        return smallestIntervalInMs;
+    public Long smallestTimer() {
+        Long smallestTimer = infiniteWaitMs;
+        if (timedTasks.size() != 0) {
+            smallestTimer = timedTasks.peek().intervalInMs;
+        }
+        return smallestTimer;
     }
 
-    public void dispatchExpiredTimers() {
+    public synchronized void dispatchExpiredTimers() {
         final Long now = System.currentTimeMillis();
         final List<Timer> expiredTimers = new ArrayList<>();
+        boolean morePossibleExpired = true;
 
-        for (Timer t: timedTasks) {
-            if (now > t.nextDispatchMs())
+        Timer t = timedTasks.peek();
+
+        while (t != null && morePossibleExpired) {
+            if (now > t.nextDispatchMs()) {
                 expiredTimers.add(t);
+                timedTasks.poll();
+                t = timedTasks.peek();
+            } else {
+                morePossibleExpired = false;
+            }
         }
+        expiredTimers.forEach(tmr -> logger.debug("Executing timer {}", tmr.sourceDesc));
         timedTasks.removeAll(expiredTimers);
         expiredTimers.forEach(Timer::fn);
     }

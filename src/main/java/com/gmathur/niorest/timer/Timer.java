@@ -28,20 +28,20 @@ import java.util.function.Function;
 
 public abstract class Timer {
     protected Long intervalInMs;
-    protected Function<SelectionKey, Void> timerFn;
+    protected Function<SelectionKey, Integer> timerFn;
     protected Long nextDispatchMs;
     protected final SelectionKey selectionKey;
+    protected final String sourceDesc;
 
-    public Timer(final Long intervalInMs, final Function<SelectionKey, Void> timerFn, final SelectionKey selectionKey) {
+    public Timer(final String sourceDesc, final Long intervalInMs, final Function<SelectionKey, Integer> timerFn, final SelectionKey selectionKey) {
+        this.sourceDesc = sourceDesc;
         this.intervalInMs = intervalInMs;
         this.timerFn = timerFn;
         this.selectionKey = selectionKey;
         this.nextDispatchMs = System.currentTimeMillis() + intervalInMs;
     }
 
-    public void fn() {
-        timerFn.apply(selectionKey);
-    }
+    public abstract void fn();
 
     public Long intervalInMs() {
         return intervalInMs;

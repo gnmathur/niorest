@@ -21,25 +21,12 @@
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package com.gmathur.niorest.timer;
+package com.gmathur.niorest;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+/**
+ * Mutable task state
+ */
+public class TaskState {
+    public Integer nConnectionRetries = 0;
 
-import java.nio.channels.SelectionKey;
-import java.util.function.Function;
-
-public class TimerPeriodic extends Timer {
-    private static final Logger logger = LoggerFactory.getLogger(TimerPeriodic.class.getCanonicalName());
-
-    public TimerPeriodic(final String sourceDesc, final Long intervalInMs, final Function<SelectionKey, Integer> timerFn, final SelectionKey key) {
-        super(sourceDesc, intervalInMs, timerFn, key);
-        logger.info("Created a backoff timer for {} ms", intervalInMs);
-    }
-
-    @Override
-    public void fn() {
-        timerFn.apply(selectionKey);
-        TimerDb.get().register(new TimerPeriodic(sourceDesc, intervalInMs, timerFn, selectionKey));
-    }
 }

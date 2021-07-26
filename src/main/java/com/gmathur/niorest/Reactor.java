@@ -24,12 +24,10 @@
 package com.gmathur.niorest;
 
 import com.gmathur.niorest.timer.TimerDb;
-import com.gmathur.niorest.timer.TimerPeriodic;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
@@ -53,20 +51,24 @@ public final class Reactor implements Runnable {
     private boolean keepRunning() { return keepRunning; }
     public void stop() { this.keepRunning = false; }
 
-    public void addTask(final Task task) throws IOException {
+    public SelectionKey addTask(final Task task) throws IOException {
         // Create a non-blocking client channel and set its options
-        SocketChannel clientChannel = SocketChannel.open();
+        final SocketChannel clientChannel = SocketChannel.open();
         clientChannel.configureBlocking(false);
         clientChannel.setOption(StandardSocketOptions.SO_KEEPALIVE, true);
 
-        SelectionKey clientKey = clientChannel.register(clientSelector, SelectionKey.OP_CONNECT);
-        clientChannel.connect(new InetSocketAddress(task.getHost(), task.getPort()));
-
+        // Register the channwith the selector and set its interest ops to OP_CONNECT to enable it to initiate
+        // a connection
+        // ToDo can't we register without expressing interest
+        final SelectionKey clientKey = clientChannel.register(clientSelector, 0);
+        // Attach the task to the key
         clientKey.attach(task);
+
         logger.info("Client {} registered", task.getClientId());
+        return clientKey;
     }
 
-    private void write(SocketChannel ch, ByteBuffer buffer, byte[] request) {
+    public static void write(SocketChannel ch, ByteBuffer buffer, byte[] request) {
         buffer.clear();
         buffer.put(request);
         buffer.flip();
@@ -81,7 +83,7 @@ public final class Reactor implements Runnable {
         buffer.clear();
     }
 
-    private boolean read(SocketChannel ch, ByteBuffer buffer) {
+    public static boolean read(SocketChannel ch, ByteBuffer buffer) {
         boolean didRead = false;
         buffer.clear();
         try {
@@ -89,9 +91,9 @@ public final class Reactor implements Runnable {
             if (readBytes != -1) {
                 buffer.flip();
                 String msg = new String(buffer.array(), 0, readBytes, StandardCharsets.UTF_8);
+                System.out.println(msg);
                 buffer.clear();
                 didRead = true;
-                logger.info(msg);
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -106,30 +108,19 @@ public final class Reactor implements Runnable {
      */
     private void once() throws IOException {
         // ToDo null check
-        clientSelector.select(timerDb.smallestIntervalInMs());
+        clientSelector.select(timerDb.smallestTimer());
 
         Set<SelectionKey> selectedKeys = clientSelector.selectedKeys();
         for (SelectionKey key: selectedKeys) {
             SocketChannel ch = (SocketChannel) key.channel();
-            Task handler = (Task) key.attachment();
+            Task taskCtx = (Task) key.attachment();
 
             if (key.isConnectable()) {
-                // ToDo handle connect exceptions here
-                boolean isConnected = ch.finishConnect();
-                logger.debug("Client {} {}", handler.getClientId(), isConnected);
-                assert(isConnected);
-                key.interestOps(key.interestOps() & ~SelectionKey.OP_CONNECT);
-                timerDb.register(new TimerPeriodic(handler.getInterval(), k -> {
-                    k.interestOps(SelectionKey.OP_WRITE);
-                    return null;
-                }, key));
+                TaskOps.connectCb(taskCtx, key, this);
             } else if (key.isWritable()) {
-                write(ch, handler.getBuffer(), handler.getRequestBytes());
-                key.interestOps(SelectionKey.OP_READ & ~SelectionKey.OP_WRITE) ;
+                TaskOps.writeCb(taskCtx, key);
             } else if (key.isReadable()) {
-                if (read(ch, handler.getBuffer())) {
-                    key.interestOps(key.interestOps() & ~SelectionKey.OP_READ) ;
-                }
+                TaskOps.readCb(taskCtx, key);
             }
         }
         selectedKeys.clear();;
