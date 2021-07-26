@@ -1,4 +1,5 @@
 # :herb: NIOREST
+_Note_: Work in progress to substantially change the way tasks and the reactor interact
 
 A simple framework for REST and HTTP API testing built on Java NIO. NIOREST is for those environments where we would like
 to test tens of thousands of APIs periodically using minimal resources. The core NIO reactor will be a single thread that
@@ -21,4 +22,4 @@ a very high order of concurrent long-lived connections, where each of these conn
 $ mvn compile && mvn exec:java -Dexec.mainClass="com.gmathur.niorest.NioRest"
 ```
 
-__Last Update__: 07/21/2021
+__Last Update__: 07/25/2021
