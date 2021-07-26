@@ -24,12 +24,10 @@
 package com.gmathur.niorest;
 
 import com.gmathur.niorest.timer.TimerDb;
-import com.gmathur.niorest.timer.TimerPeriodic;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
@@ -55,14 +53,17 @@ public final class Reactor implements Runnable {
 
     public SelectionKey addTask(final Task task) throws IOException {
         // Create a non-blocking client channel and set its options
-        SocketChannel clientChannel = SocketChannel.open();
+        final SocketChannel clientChannel = SocketChannel.open();
         clientChannel.configureBlocking(false);
         clientChannel.setOption(StandardSocketOptions.SO_KEEPALIVE, true);
 
-        SelectionKey clientKey = clientChannel.register(clientSelector, SelectionKey.OP_CONNECT);
-        clientChannel.connect(new InetSocketAddress(task.getHost(), task.getPort()));
-
+        // Register the channwith the selector and set its interest ops to OP_CONNECT to enable it to initiate
+        // a connection
+        // ToDo can't we register without expressing interest
+        final SelectionKey clientKey = clientChannel.register(clientSelector, 0);
+        // Attach the task to the key
         clientKey.attach(task);
+
         logger.info("Client {} registered", task.getClientId());
         return clientKey;
     }
@@ -90,6 +91,7 @@ public final class Reactor implements Runnable {
             if (readBytes != -1) {
                 buffer.flip();
                 String msg = new String(buffer.array(), 0, readBytes, StandardCharsets.UTF_8);
+                System.out.println(msg);
                 buffer.clear();
                 didRead = true;
             }
@@ -106,7 +108,7 @@ public final class Reactor implements Runnable {
      */
     private void once() throws IOException {
         // ToDo null check
-        clientSelector.select(timerDb.smallestIntervalInMs());
+        clientSelector.select(timerDb.smallestTimer());
 
         Set<SelectionKey> selectedKeys = clientSelector.selectedKeys();
         for (SelectionKey key: selectedKeys) {
@@ -114,14 +116,11 @@ public final class Reactor implements Runnable {
             Task taskCtx = (Task) key.attachment();
 
             if (key.isConnectable()) {
-                TaskOps.connectCb(taskCtx, this);
+                TaskOps.connectCb(taskCtx, key, this);
             } else if (key.isWritable()) {
-                write(ch, taskCtx.getBuffer(), taskCtx.getRequestBytes());
-                key.interestOps(SelectionKey.OP_READ & ~SelectionKey.OP_WRITE) ;
+                TaskOps.writeCb(taskCtx, key);
             } else if (key.isReadable()) {
-                if (read(ch, taskCtx.getBuffer())) {
-                    key.interestOps(key.interestOps() & ~SelectionKey.OP_READ) ;
-                }
+                TaskOps.readCb(taskCtx, key);
             }
         }
         selectedKeys.clear();;

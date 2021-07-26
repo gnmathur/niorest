@@ -42,6 +42,9 @@ public class Task {
     private final String host;
     private final Short port;
     private final String endpoint;
+    public final Long maxBackoffTimeMs = 64000L;
+    public final TaskState taskState;
+    public final String identifier;
 
     private Task(final String host, final Short port, final String endpoint, final Long interval) {
         this.buffer = ByteBuffer.allocate(1024);
@@ -56,6 +59,8 @@ public class Task {
         this.host = host;
         this.port = port;
         this.endpoint = endpoint;
+        this.taskState = new TaskState();
+        this.identifier = String.format("%s:%s:%s", host, port, endpoint);
     }
 
     public String getClientId()     { return clientId;  }
