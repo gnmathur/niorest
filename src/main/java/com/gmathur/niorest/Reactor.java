@@ -53,7 +53,7 @@ public final class Reactor implements Runnable {
     private boolean keepRunning() { return keepRunning; }
     public void stop() { this.keepRunning = false; }
 
-    public void addTask(final Task task) throws IOException {
+    public SelectionKey addTask(final Task task) throws IOException {
         // Create a non-blocking client channel and set its options
         SocketChannel clientChannel = SocketChannel.open();
         clientChannel.configureBlocking(false);
@@ -64,9 +64,10 @@ public final class Reactor implements Runnable {
 
         clientKey.attach(task);
         logger.info("Client {} registered", task.getClientId());
+        return clientKey;
     }
 
-    private void write(SocketChannel ch, ByteBuffer buffer, byte[] request) {
+    public static void write(SocketChannel ch, ByteBuffer buffer, byte[] request) {
         buffer.clear();
         buffer.put(request);
         buffer.flip();
@@ -81,7 +82,7 @@ public final class Reactor implements Runnable {
         buffer.clear();
     }
 
-    private boolean read(SocketChannel ch, ByteBuffer buffer) {
+    public static boolean read(SocketChannel ch, ByteBuffer buffer) {
         boolean didRead = false;
         buffer.clear();
         try {
@@ -91,7 +92,6 @@ public final class Reactor implements Runnable {
                 String msg = new String(buffer.array(), 0, readBytes, StandardCharsets.UTF_8);
                 buffer.clear();
                 didRead = true;
-                logger.info(msg);
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -111,23 +111,15 @@ public final class Reactor implements Runnable {
         Set<SelectionKey> selectedKeys = clientSelector.selectedKeys();
         for (SelectionKey key: selectedKeys) {
             SocketChannel ch = (SocketChannel) key.channel();
-            Task handler = (Task) key.attachment();
+            Task taskCtx = (Task) key.attachment();
 
             if (key.isConnectable()) {
-                // ToDo handle connect exceptions here
-                boolean isConnected = ch.finishConnect();
-                logger.debug("Client {} {}", handler.getClientId(), isConnected);
-                assert(isConnected);
-                key.interestOps(key.interestOps() & ~SelectionKey.OP_CONNECT);
-                timerDb.register(new TimerPeriodic(handler.getInterval(), k -> {
-                    k.interestOps(SelectionKey.OP_WRITE);
-                    return null;
-                }, key));
+                TaskOps.connectCb(taskCtx, this);
             } else if (key.isWritable()) {
-                write(ch, handler.getBuffer(), handler.getRequestBytes());
+                write(ch, taskCtx.getBuffer(), taskCtx.getRequestBytes());
                 key.interestOps(SelectionKey.OP_READ & ~SelectionKey.OP_WRITE) ;
             } else if (key.isReadable()) {
-                if (read(ch, handler.getBuffer())) {
+                if (read(ch, taskCtx.getBuffer())) {
                     key.interestOps(key.interestOps() & ~SelectionKey.OP_READ) ;
                 }
             }

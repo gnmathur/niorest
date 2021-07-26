@@ -27,13 +27,12 @@ import java.nio.channels.SelectionKey;
 import java.util.function.Function;
 
 public class TimerPeriodic extends Timer {
-    public TimerPeriodic(final Long intervalInMs, final Function<SelectionKey, Void> timerFn, final SelectionKey key) {
+    public TimerPeriodic(final Long intervalInMs, final Function<SelectionKey, Integer> timerFn, final SelectionKey key) {
         super(intervalInMs, timerFn, key);
     }
 
     @Override
     public void fn() {
-        super.fn();
         TimerDb.get().register(new TimerPeriodic(intervalInMs, timerFn, selectionKey));
     }
 }

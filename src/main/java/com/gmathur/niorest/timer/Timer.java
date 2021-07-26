@@ -23,25 +23,26 @@
 
 package com.gmathur.niorest.timer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.nio.channels.SelectionKey;
 import java.util.function.Function;
 
 public abstract class Timer {
     protected Long intervalInMs;
-    protected Function<SelectionKey, Void> timerFn;
+    protected Function<SelectionKey, Integer> timerFn;
     protected Long nextDispatchMs;
     protected final SelectionKey selectionKey;
 
-    public Timer(final Long intervalInMs, final Function<SelectionKey, Void> timerFn, final SelectionKey selectionKey) {
+    public Timer(final Long intervalInMs, final Function<SelectionKey, Integer> timerFn, final SelectionKey selectionKey) {
         this.intervalInMs = intervalInMs;
         this.timerFn = timerFn;
         this.selectionKey = selectionKey;
         this.nextDispatchMs = System.currentTimeMillis() + intervalInMs;
     }
 
-    public void fn() {
-        timerFn.apply(selectionKey);
-    }
+    public abstract void fn();
 
     public Long intervalInMs() {
         return intervalInMs;

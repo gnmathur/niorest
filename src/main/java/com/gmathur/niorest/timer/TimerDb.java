@@ -25,6 +25,7 @@ package com.gmathur.niorest.timer;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.PriorityQueue;
 
 /**
@@ -43,7 +44,8 @@ public class TimerDb {
         return instance;
     }
 
-    public void register(final Timer t) {
+    public synchronized void register(final Timer t) {
+        Objects.requireNonNull(t, "Illegal attempt to register a null timer");
         timedTasks.add(t);
         smallestIntervalInMs = (t.intervalInMs() < smallestIntervalInMs) ? t.intervalInMs() : smallestIntervalInMs;
     }
@@ -52,13 +54,22 @@ public class TimerDb {
         return smallestIntervalInMs;
     }
 
-    public void dispatchExpiredTimers() {
+    public synchronized void dispatchExpiredTimers() {
         final Long now = System.currentTimeMillis();
         final List<Timer> expiredTimers = new ArrayList<>();
+        boolean morePossibleExpired = true;
 
-        for (Timer t: timedTasks) {
-            if (now > t.nextDispatchMs())
+        Timer t = timedTasks.peek();
+        if (t == null) morePossibleExpired = false;
+
+        while (morePossibleExpired) {
+            if (now > t.nextDispatchMs()) {
                 expiredTimers.add(t);
+                timedTasks.poll();
+                t = timedTasks.peek();
+            }
+            else
+                morePossibleExpired = false;
         }
         timedTasks.removeAll(expiredTimers);
         expiredTimers.forEach(Timer::fn);

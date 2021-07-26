@@ -66,34 +66,34 @@ public class Task {
     public ByteBuffer getBuffer()   { return buffer; }
     public byte[] getRequestBytes() { return request.toBytes(); }
 
-    public static ClientBuilder newBuilder() {
-        return new ClientBuilder();
+    public static TaskBuilder newBuilder() {
+        return new TaskBuilder();
     }
 
-    public static class ClientBuilder {
+    public static class TaskBuilder {
         private String host;
         private Short port;
         private String endpoint;
         private Long interval;
 
-        private ClientBuilder() {}
+        private TaskBuilder() {}
 
-        public ClientBuilder host(final String host) {
+        public TaskBuilder host(final String host) {
             this.host = host;
             return this;
         }
 
-        public ClientBuilder port(final Short port) {
+        public TaskBuilder port(final Short port) {
             this.port = port;
             return this;
         }
 
-        public ClientBuilder endpoint(final String endpoint) {
+        public TaskBuilder endpoint(final String endpoint) {
             this.endpoint = endpoint;
             return this;
         }
 
-        public ClientBuilder interval(final Long interval) {
+        public TaskBuilder interval(final Long interval) {
             this.interval = interval;
             return this;
         }
