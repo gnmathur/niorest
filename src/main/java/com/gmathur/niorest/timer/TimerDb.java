@@ -26,10 +26,7 @@ package com.gmathur.niorest.timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.PriorityQueue;
+import java.util.*;
 
 /**
  * Singleton class to register and manage timers
@@ -39,9 +36,11 @@ public class TimerDb {
 
     private static TimerDb instance = null;
     private final Long infiniteWaitMs = Long.MAX_VALUE;
-    private final PriorityQueue<Timer> timedTasks = new PriorityQueue<>((o1, o2) -> (int)(o1.nextDispatchMs() - o2.nextDispatchMs()));
+    private final PriorityQueue<Timer> allTimedTasks = new PriorityQueue<>((o1, o2) -> (int)(o1.intervalInMs - o2.intervalInMs));
+    // An arbitrary key that has an associated list of timers
+    private final Map<Object, List<Timer>> associations = new HashMap<>();
 
-    private TimerDb() {}
+    private TimerDb() { }
 
     public synchronized static TimerDb get() {
         if (instance == null)
@@ -51,13 +50,22 @@ public class TimerDb {
 
     public synchronized void register(final Timer t) {
         Objects.requireNonNull(t, "Illegal attempt to register a null timer");
-        timedTasks.add(t);
+        allTimedTasks.add(t);
+        List<Timer> timersAssociatedWithKey = associations.getOrDefault(t.association, new ArrayList<>());
+        timersAssociatedWithKey.add(t);
+        associations.put(t.association, timersAssociatedWithKey);
+        // ToDo should wakeup the reactor
+    }
+
+    public synchronized void cancelTimers(final Object association) {
+        List<Timer> timers = associations.get(association);
+        allTimedTasks.removeAll(timers);
     }
 
     public Long smallestTimer() {
         Long smallestTimer = infiniteWaitMs;
-        if (timedTasks.size() != 0) {
-            smallestTimer = timedTasks.peek().intervalInMs;
+        if (allTimedTasks.size() != 0) {
+            smallestTimer = allTimedTasks.peek().intervalInMs;
         }
         return smallestTimer;
     }
@@ -67,19 +75,19 @@ public class TimerDb {
         final List<Timer> expiredTimers = new ArrayList<>();
         boolean morePossibleExpired = true;
 
-        Timer t = timedTasks.peek();
+        Timer t = allTimedTasks.peek();
 
         while (t != null && morePossibleExpired) {
             if (now > t.nextDispatchMs()) {
                 expiredTimers.add(t);
-                timedTasks.poll();
-                t = timedTasks.peek();
+                allTimedTasks.poll();
+                t = allTimedTasks.peek();
             } else {
                 morePossibleExpired = false;
             }
         }
-        expiredTimers.forEach(tmr -> logger.debug("Executing timer {}", tmr.sourceDesc));
-        timedTasks.removeAll(expiredTimers);
+        expiredTimers.forEach(tmr -> logger.info("Executing timer {}", tmr.sourceDesc));
+        allTimedTasks.removeAll(expiredTimers);
         expiredTimers.forEach(Timer::fn);
     }
 }

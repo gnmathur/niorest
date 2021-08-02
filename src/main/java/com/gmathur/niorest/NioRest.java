@@ -36,12 +36,12 @@ public class NioRest {
         final Task c1 = Task.newBuilder()
                 .host("localhost").port((short)8080).endpoint("/health?name=Gaurav").interval(5000L)
                 .build();
-        TaskOps.register(c1, reactor);
+        ReactorOps.register(c1, reactor);
 
         final Task c2 = Task.newBuilder()
                 .host("localhost").port((short)8080).endpoint("/ip").interval(10000L)
                 .build();
-        TaskOps.register(c2, reactor);
+        ReactorOps.register(c2, reactor);
 
         final Thread r = new Thread(reactor);
         r.start();

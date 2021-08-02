@@ -27,8 +27,11 @@ import java.nio.channels.SelectionKey;
 import java.util.function.Function;
 
 public class TimerOneshot extends Timer {
-    public TimerOneshot(final String sourceDesc, final Function<SelectionKey, Integer> timerFn, final SelectionKey key) {
-        super(sourceDesc, 1L, timerFn, key);
+    public TimerOneshot(final Object association,
+                        final String sourceDesc,
+                        final Function<SelectionKey, Integer> timerFn,
+                        final SelectionKey key) {
+        super(association, sourceDesc, 1L, timerFn, key);
 }
 
     @Override

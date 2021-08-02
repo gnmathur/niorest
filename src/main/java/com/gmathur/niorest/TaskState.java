@@ -28,5 +28,6 @@ package com.gmathur.niorest;
  */
 public class TaskState {
     public Integer nConnectionRetries = 0;
+    public Integer nWriteRetries = 0;
 
 }

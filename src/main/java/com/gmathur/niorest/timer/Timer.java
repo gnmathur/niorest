@@ -32,8 +32,14 @@ public abstract class Timer {
     protected Long nextDispatchMs;
     protected final SelectionKey selectionKey;
     protected final String sourceDesc;
+    protected final Object association;
 
-    public Timer(final String sourceDesc, final Long intervalInMs, final Function<SelectionKey, Integer> timerFn, final SelectionKey selectionKey) {
+    public Timer(final Object association,
+                 final String sourceDesc,
+                 final Long intervalInMs,
+                 final Function<SelectionKey, Integer> timerFn,
+                 final SelectionKey selectionKey) {
+        this.association = association;
         this.sourceDesc = sourceDesc;
         this.intervalInMs = intervalInMs;
         this.timerFn = timerFn;

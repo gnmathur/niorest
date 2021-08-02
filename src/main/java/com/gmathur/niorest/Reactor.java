@@ -37,7 +37,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public final class Reactor implements Runnable {
-    private final Logger logger = LoggerFactory.getLogger(Reactor.class.getCanonicalName());
+    private static final Logger logger = LoggerFactory.getLogger(Reactor.class.getCanonicalName());
     private final Selector clientSelector;
     private final TimerDb timerDb = TimerDb.get();
 
@@ -68,19 +68,27 @@ public final class Reactor implements Runnable {
         return clientKey;
     }
 
-    public static void write(SocketChannel ch, ByteBuffer buffer, byte[] request) {
+    public void removeTask(final Task t) {
+
+    }
+
+    public static boolean write(SocketChannel ch, ByteBuffer buffer, byte[] request) {
+        boolean didWrite = true;
+
         buffer.clear();
         buffer.put(request);
         buffer.flip();
-        while (buffer.hasRemaining()) {
-            try {
+        try {
+            while (buffer.hasRemaining()) {
                 int written = ch.write(buffer);
-                assert(written > 0);
-            } catch (IOException e) {
-                e.printStackTrace();
+                assert (written > 0);
             }
+        } catch (IOException e) {
+            logger.error("Failed to write (err: " + e.getMessage() + ")");
+            didWrite = false;
         }
         buffer.clear();
+        return didWrite;
     }
 
     public static boolean read(SocketChannel ch, ByteBuffer buffer) {
@@ -91,7 +99,7 @@ public final class Reactor implements Runnable {
             if (readBytes != -1) {
                 buffer.flip();
                 String msg = new String(buffer.array(), 0, readBytes, StandardCharsets.UTF_8);
-                System.out.println(msg);
+                logger.info(msg);
                 buffer.clear();
                 didRead = true;
             }
@@ -116,11 +124,11 @@ public final class Reactor implements Runnable {
             Task taskCtx = (Task) key.attachment();
 
             if (key.isConnectable()) {
-                TaskOps.connectCb(taskCtx, key, this);
+                ReactorOps.connectCb(taskCtx, key, this);
             } else if (key.isWritable()) {
-                TaskOps.writeCb(taskCtx, key);
+                ReactorOps.writeCb(taskCtx, key, this);
             } else if (key.isReadable()) {
-                TaskOps.readCb(taskCtx, key);
+                ReactorOps.readCb(taskCtx, key, this);
             }
         }
         selectedKeys.clear();;

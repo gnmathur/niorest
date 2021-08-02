@@ -107,4 +107,18 @@ public class Task {
             return new Task(host, port, endpoint, interval);
         }
     }
+
+    /**
+     * Create a clone of a task. The clone has the same config as the original task, with the Task state reset.
+     * @param t The task to clone
+     * @return The cloned Task
+     */
+    public static Task clone(final Task t) {
+        return new TaskBuilder()
+                .host(t.host)
+                .port(t.port)
+                .endpoint(t.endpoint)
+                .interval(t.interval)
+                .build();
+    }
 }

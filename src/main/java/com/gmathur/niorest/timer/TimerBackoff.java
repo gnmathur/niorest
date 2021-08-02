@@ -39,10 +39,14 @@ import java.util.function.Function;
 public class TimerBackoff extends Timer {
     private static final Logger logger = LoggerFactory.getLogger(TimerBackoff.class.getCanonicalName());
 
-    public TimerBackoff(final String sourceDesc, final Integer nConnectionRetries, final Long maxBackoffTimeMs,
-                        final Function<SelectionKey, Integer> timerFn, final SelectionKey key) {
-        super(sourceDesc, 0L, timerFn, key);
-        Long interval = ((1L << nConnectionRetries) * 1000L) + ((long)(Math.random() * 1000L));
+    public TimerBackoff(final Object association,
+                        final String sourceDesc,
+                        final Integer nRetries,
+                        final Long maxBackoffTimeMs,
+                        final Function<SelectionKey, Integer> timerFn,
+                        final SelectionKey key) {
+        super(association, sourceDesc, 0L, timerFn, key);
+        Long interval = ((1L << nRetries) * 1000L) + ((long)(Math.random() * 1000L));
         if (interval > maxBackoffTimeMs) {
             interval = maxBackoffTimeMs;
         }
