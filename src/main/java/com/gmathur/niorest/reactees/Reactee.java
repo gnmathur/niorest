@@ -21,13 +21,56 @@
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package com.gmathur.niorest;
+package com.gmathur.niorest.reactees;
+
+import java.nio.ByteBuffer;
 
 /**
- * Mutable task state
+ * A Reactee implements a some line protocol. A Reactee implementation would provide an implemention that will allow
+ * the Reactor to move forward and to take decisions on when and how to move the operations ahead.
  */
-public class TaskState {
-    public Integer nConnectionRetries = 0;
-    public Integer nWriteRetries = 0;
+public interface Reactee {
+    /**
+     *
+     */
+    String getId();
 
+    String getHost();
+
+    Short getPort();
+
+    Long getInterval();
+
+    ReacteeState getState();
+
+    Long getMaxBackoffTimeMs();
+
+    /**
+     *
+     * @param msg Read bytes
+     * @return True if the reactee has more to read
+     */
+    boolean readCb(final ByteBuffer msg);
+
+    /**
+     *
+     * @param didWrite
+     */
+    void writeCb(boolean didWrite);
+
+    /**
+     * Reactee needs to provide a byte buffer
+     * @return
+     */
+    ByteBuffer getBuffer();
+
+    /**
+     */
+    public byte[] getRequestBytes();
+
+    /**
+     *
+     * @return
+     */
+    Reactee clone();
 }

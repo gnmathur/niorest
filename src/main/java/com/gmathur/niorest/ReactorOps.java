@@ -23,6 +23,7 @@
 
 package com.gmathur.niorest;
 
+import com.gmathur.niorest.reactees.Reactee;
 import com.gmathur.niorest.timer.TimerBackoff;
 import com.gmathur.niorest.timer.TimerDb;
 import com.gmathur.niorest.timer.TimerOneshot;
@@ -34,7 +35,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
-import java.util.function.Function;
 
 /**
  * Reactor functions. This class acts as an adaptor between the reactor and Tasks
@@ -43,14 +43,14 @@ public final class ReactorOps {
     private static final Logger logger = LoggerFactory.getLogger(ReactorOps.class.getCanonicalName());
     private ReactorOps() {}
 
-    public static void register(final Task t, final Reactor r) throws IOException {
-        SelectionKey key = r.addTask(t);
+    public static void register(final Reactee reactee, final Reactor r) throws IOException {
+        SelectionKey key = r.addReactee(reactee);
         TimerDb.get().register(new TimerOneshot(key, "being connect timer", key1 -> {
             SocketChannel clientChannel = (SocketChannel) key1.channel();
             try {
-                logger.info("Initiating connection to {}:{}", t.getHost(), t.getPort());
+                logger.info("Initiating connection to {}:{}", reactee.getHost(), reactee.getPort());
                 key1.interestOps(SelectionKey.OP_CONNECT);
-                clientChannel.connect(new InetSocketAddress(t.getHost(), t.getPort()));
+                clientChannel.connect(new InetSocketAddress(reactee.getHost(), reactee.getPort()));
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -61,16 +61,16 @@ public final class ReactorOps {
     /**
      * Clean the Task t from the reactor and re-register it with the
      */
-    public static void reRegister(final Task t, final Reactor r, final SelectionKey key) throws IOException {
+    public static void reRegister(final Reactee t, final Reactor r, final SelectionKey key) throws IOException {
         SocketChannel clientChannel = (SocketChannel) key.channel();
         clientChannel.close();
         key.cancel();
         TimerDb.get().cancelTimers(key);
-        register(Task.clone(t), r);
+        register(t.clone(), r);
     }
 
-    public static void connectCb(final Task t, final SelectionKey key, final Reactor r) {
-        logger.debug("Connect callback for task {}", t.identifier);
+    public static void connectCb(final Reactee reactee, final SelectionKey key, final Reactor r) {
+        logger.debug("Connect callback for task {}", reactee.getId());
 
         SocketChannel clientChannel = (SocketChannel) key.channel();
         try {
@@ -82,18 +82,18 @@ public final class ReactorOps {
                 return 1;
             }, key));
 
-            TimerDb.get().register(new TimerPeriodic(key, "periodic write timer", t.getInterval(),
+            TimerDb.get().register(new TimerPeriodic(key, "periodic write timer", reactee.getInterval(),
                     selectionKey -> {
                         selectionKey.interestOps(SelectionKey.OP_WRITE);
                         return 1;
                     }, key));
         } catch (IOException e) {
             logger.error("Error connecting to remote endpoint. Retrying connection (err: {})", e.getMessage());
-            t.taskState.nConnectionRetries += 1;
+            reactee.getState().nConnectionRetries += 1;
             TimerDb.get().register(new TimerBackoff(key, "finish connect failure timer",
-                    t.taskState.nConnectionRetries, t.maxBackoffTimeMs, selectionKey -> {
+                    reactee.getState().nConnectionRetries, reactee.getMaxBackoffTimeMs(), selectionKey -> {
                         try {
-                            ReactorOps.register(t, r);
+                            ReactorOps.register(reactee, r);
                         } catch (IOException ioException) {
                             ioException.printStackTrace();
                         }
@@ -102,21 +102,14 @@ public final class ReactorOps {
         }
     }
 
-    public static void writeCb(final Task t, final SelectionKey key, final Reactor r) throws IOException {
+    public static void writeCb(final Reactee reactee, final SelectionKey key, final Reactor r) throws IOException {
         final SocketChannel ch = (SocketChannel) key.channel();
 
-        final boolean didWrite = Reactor.write(ch, t.getBuffer(), t.getRequestBytes());
+        final boolean didWrite = Reactor.write(ch, reactee.getBuffer(), reactee.getRequestBytes());
         if (!didWrite) {
-            reRegister(t, r, key);
+            reRegister(reactee, r, key);
         } else {
             key.interestOps(SelectionKey.OP_READ & ~SelectionKey.OP_WRITE);
         }
-    }
-
-    public static void readCb(final Task t, final SelectionKey key, final Reactor r) {
-        final SocketChannel ch = (SocketChannel) key.channel();
-
-        Reactor.read(ch, t.getBuffer());
-        key.interestOps(key.interestOps() & ~SelectionKey.OP_READ);
     }
 }

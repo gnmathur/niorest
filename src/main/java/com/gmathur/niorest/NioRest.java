@@ -23,6 +23,8 @@
 
 package com.gmathur.niorest;
 
+import com.gmathur.niorest.reactees.Task;
+
 import java.io.IOException;
 
 /**
@@ -41,7 +43,17 @@ public class NioRest {
         final Task c2 = Task.newBuilder()
                 .host("localhost").port((short)8080).endpoint("/ip").interval(10000L)
                 .build();
-        ReactorOps.register(c2, reactor);
+        //ReactorOps.register(c2, reactor);
+
+        final Task c3 = Task.newBuilder()
+                .host("localhost").port((short)8080).endpoint("/book?name=donquixote").interval(5 * 60 * 1000L)
+                .build();
+        // ReactorOps.register(c3, reactor);
+
+        final Task c4 = Task.newBuilder()
+                .host("localhost").port((short)8080).endpoint("/poem").interval(5000L)
+                .build();
+        ReactorOps.register(c4, reactor);
 
         final Thread r = new Thread(reactor);
         r.start();
