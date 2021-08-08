@@ -23,6 +23,7 @@
 
 package com.gmathur.niorest;
 
+import com.gmathur.niorest.reactees.Reactee;
 import com.gmathur.niorest.timer.TimerDb;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,7 +52,7 @@ public final class Reactor implements Runnable {
     private boolean keepRunning() { return keepRunning; }
     public void stop() { this.keepRunning = false; }
 
-    public SelectionKey addTask(final Task task) throws IOException {
+    public SelectionKey addReactee(final Reactee reactee) throws IOException {
         // Create a non-blocking client channel and set its options
         final SocketChannel clientChannel = SocketChannel.open();
         clientChannel.configureBlocking(false);
@@ -62,13 +63,13 @@ public final class Reactor implements Runnable {
         // ToDo can't we register without expressing interest
         final SelectionKey clientKey = clientChannel.register(clientSelector, 0);
         // Attach the task to the key
-        clientKey.attach(task);
+        clientKey.attach(reactee);
 
-        logger.info("Client {} registered", task.getClientId());
+        logger.info("Client {} registered", reactee.getId());
         return clientKey;
     }
 
-    public void removeTask(final Task t) {
+    public void removeTask(final Reactee task) {
 
     }
 
@@ -91,22 +92,31 @@ public final class Reactor implements Runnable {
         return didWrite;
     }
 
-    public static boolean read(SocketChannel ch, ByteBuffer buffer) {
-        boolean didRead = false;
+    /**
+     *
+     * @param reactee
+     * @param key
+     * @return true whether reactee read all it expected to. That is a signal to the reactor to start expecting
+     * bytes
+     */
+    private boolean read(final Reactee reactee, final SelectionKey key) {
+        final SocketChannel ch = (SocketChannel) key.channel();
+        ByteBuffer buffer = reactee.getBuffer();
+        Boolean readMore = false;
+
         buffer.clear();
         try {
             int readBytes = ch.read(buffer); // ToDo handle exceptions
+            logger.debug("read " + readBytes + " bytes");
             if (readBytes != -1) {
                 buffer.flip();
-                String msg = new String(buffer.array(), 0, readBytes, StandardCharsets.UTF_8);
-                logger.info(msg);
+                readMore = !reactee.readCb(buffer);
                 buffer.clear();
-                didRead = true;
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
-        return didRead;
+        return readMore;
     }
 
     /**
@@ -120,15 +130,16 @@ public final class Reactor implements Runnable {
 
         Set<SelectionKey> selectedKeys = clientSelector.selectedKeys();
         for (SelectionKey key: selectedKeys) {
-            SocketChannel ch = (SocketChannel) key.channel();
-            Task taskCtx = (Task) key.attachment();
+            Reactee reactee = (Reactee) key.attachment();
 
             if (key.isConnectable()) {
-                ReactorOps.connectCb(taskCtx, key, this);
+                ReactorOps.connectCb(reactee, key, this);
             } else if (key.isWritable()) {
-                ReactorOps.writeCb(taskCtx, key, this);
+                ReactorOps.writeCb(reactee, key, this);
             } else if (key.isReadable()) {
-                ReactorOps.readCb(taskCtx, key, this);
+                if (!read(reactee, key)) {
+                    key.interestOps(key.interestOps() & ~SelectionKey.OP_READ);
+                }
             }
         }
         selectedKeys.clear();;
